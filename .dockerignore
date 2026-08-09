@@ -1,0 +1,15 @@
+.git
+.github
+.env
+.env.*
+!.env.example
+bin
+build
+dist
+coverage.out
+coverage.html
+tmp
+*.log
+README.md
+docs
+
