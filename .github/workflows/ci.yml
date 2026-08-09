@@ -19,7 +19,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Check out repository and contract tags
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -76,7 +76,7 @@ jobs:
           - worker
           - migrate
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Build ${{ matrix.target }} image without publishing
         run: >-
           docker build
