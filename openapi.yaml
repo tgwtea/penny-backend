@@ -1,0 +1,126 @@
+openapi: 3.0.3
+info:
+  title: Penny Backend API
+  version: 1.0.0
+  description: >-
+    The backend-owned Penny HTTP contract. This initial contract intentionally
+    contains only operational endpoints; product endpoints will be added under
+    /api/v1 contract-first.
+servers:
+  - url: /
+paths:
+  /health/live:
+    get:
+      operationId: getHealthLive
+      summary: Report whether the API process is alive
+      description: Does not depend on PostgreSQL or external providers.
+      security: []
+      responses:
+        "200":
+          description: The API process is alive.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+  /health/ready:
+    get:
+      operationId: getHealthReady
+      summary: Report whether the API can safely receive traffic
+      description: Checks the API's PostgreSQL connection but no transient external provider.
+      security: []
+      responses:
+        "200":
+          description: The API is ready to receive traffic.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+        "503":
+          description: A required dependency is unavailable.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+components:
+  schemas:
+    HealthResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - status
+        - service
+        - version
+        - commit
+        - artifactDigest
+        - contractVersion
+        - productMilestone
+      properties:
+        status:
+          type: string
+          enum:
+            - alive
+            - ready
+        service:
+          type: string
+          enum:
+            - api
+        version:
+          type: string
+        commit:
+          type: string
+        artifactDigest:
+          type: string
+        contractVersion:
+          type: string
+        productMilestone:
+          type: string
+    Problem:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - title
+        - status
+        - code
+      properties:
+        type:
+          type: string
+          format: uri-reference
+          description: A URI reference identifying the problem type.
+        title:
+          type: string
+        status:
+          type: integer
+          format: int32
+          minimum: 400
+          maximum: 599
+        detail:
+          type: string
+        instance:
+          type: string
+          format: uri-reference
+        code:
+          type: string
+          description: A stable Penny error code intended for client behaviour.
+        requestId:
+          type: string
+          description: Present for unexpected failures so support can correlate logs.
+        errors:
+          type: array
+          items:
+            $ref: "#/components/schemas/FieldError"
+    FieldError:
+      type: object
+      additionalProperties: false
+      required:
+        - field
+        - code
+        - message
+      properties:
+        field:
+          type: string
+        code:
+          type: string
+        message:
+          type: string
+
