@@ -1,0 +1,89 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository and contract tags
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up pinned Go toolchain
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Download modules
+        run: go mod download
+
+      - name: Regenerate committed code
+        run: go generate ./...
+
+      - name: Reject generated-code drift
+        run: git diff --exit-code -- openapi.yaml internal/api/openapi.generated.go internal/platform/database/dbgen
+
+      - name: Check API compatibility
+        run: bash .github/scripts/check-contract.sh
+
+      - name: Check formatting
+        run: go tool golangci-lint fmt --diff
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Lint
+        run: go tool golangci-lint run
+
+      - name: Unit tests with race detector
+        run: go test -race -coverprofile=coverage.out ./...
+
+      - name: Vulnerability scan
+        run: go tool govulncheck ./...
+
+      - name: Build executables
+        run: go build ./cmd/api ./cmd/worker ./cmd/migrate ./cmd/dbcheck
+
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage.out
+          if-no-files-found: error
+
+  container-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      matrix:
+        target:
+          - api
+          - worker
+          - migrate
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build ${{ matrix.target }} image without publishing
+        run: >-
+          docker build
+          --target ${{ matrix.target }}
+          --build-arg VERSION=ci
+          --build-arg COMMIT=${{ github.sha }}
+          --build-arg CONTRACT_VERSION=1.0.0
+          --tag penny-${{ matrix.target }}:ci
+          .
+

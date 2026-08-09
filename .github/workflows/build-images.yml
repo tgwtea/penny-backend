@@ -1,0 +1,98 @@
+name: Build immutable backend images
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Backend semantic version (for example 0.1.0)
+        required: true
+        type: string
+  push:
+    tags:
+      - "backend-v*"
+
+permissions:
+  contents: read
+  packages: write
+  attestations: write
+  id-token: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - run: go mod download
+      - run: go generate ./...
+      - name: Reject generated-code drift
+        run: git diff --exit-code -- openapi.yaml internal/api/openapi.generated.go internal/platform/database/dbgen
+      - run: go vet ./...
+      - run: go tool golangci-lint run
+      - run: go test -race ./...
+      - run: go tool govulncheck ./...
+      - run: go build ./cmd/api ./cmd/worker ./cmd/migrate
+
+  build:
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      matrix:
+        target:
+          - api
+          - worker
+          - migrate
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Derive immutable image tags
+        id: metadata
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}-${{ matrix.target }}
+          tags: |
+            type=sha,format=long
+            type=ref,event=tag
+
+      - name: Build and publish once
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: ${{ matrix.target }}
+          push: true
+          tags: ${{ steps.metadata.outputs.tags }}
+          labels: ${{ steps.metadata.outputs.labels }}
+          build-args: |
+            VERSION=${{ inputs.version || github.ref_name }}
+            COMMIT=${{ github.sha }}
+            CONTRACT_VERSION=1.0.0
+          provenance: mode=max
+          sbom: true
+
+      - name: Record immutable release coordinate
+        shell: bash
+        run: |
+          mkdir -p release-metadata
+          printf '%s\n' \
+            '{"component":"${{ matrix.target }}","commit":"${{ github.sha }}","digest":"${{ steps.build.outputs.digest }}","contractVersion":"1.0.0"}' \
+            > "release-metadata/${{ matrix.target }}.json"
+
+      - name: Upload release coordinate
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-metadata-${{ matrix.target }}
+          path: release-metadata/${{ matrix.target }}.json
+          if-no-files-found: error
