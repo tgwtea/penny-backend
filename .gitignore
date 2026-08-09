@@ -62,8 +62,8 @@ air.log
 # Docker
 docker-compose.override.yml
 
-# Generated files
-*.generated.go
+# OpenAPI and sqlc output is generated but intentionally committed. CI checks
+# regeneration drift, so generated Go files must not be ignored.
 
 # Test cache
 .cache/
