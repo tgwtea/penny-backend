@@ -91,7 +91,7 @@ jobs:
             > "release-metadata/${{ matrix.target }}.json"
 
       - name: Upload release coordinate
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: release-metadata-${{ matrix.target }}
           path: release-metadata/${{ matrix.target }}.json
